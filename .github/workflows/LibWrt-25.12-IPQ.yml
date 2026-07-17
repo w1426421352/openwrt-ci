@@ -68,14 +68,17 @@ jobs:
             ipq60xx-wifi)
               config_file="configs/libwrt-ipq60xx-wifi.config"
               target_subtarget="ipq60xx"
+              expected_devices="CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_qihoo_360v6=y"
               ;;
             ipq60xx-nowifi)
               config_file="configs/libwrt-ipq60xx-nowifi.config"
               target_subtarget="ipq60xx"
+              expected_devices="CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_zn_m2=y"
               ;;
             ipq807x-wifi)
               config_file="configs/libwrt-ipq807x-wifi.config"
               target_subtarget="ipq807x"
+              expected_devices=$'CONFIG_TARGET_DEVICE_qualcommax_ipq807x_DEVICE_redmi_ax6=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq807x_DEVICE_xiaomi_ax3600=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq807x_DEVICE_xiaomi_ax9000=y'
               ;;
             *)
               echo "Unsupported profile: $BUILD_PROFILE" >&2
@@ -85,6 +88,11 @@ jobs:
 
           echo "CONFIG_FILE=$GITHUB_WORKSPACE/$config_file" >> "$GITHUB_ENV"
           echo "TARGET_SUBTARGET=$target_subtarget" >> "$GITHUB_ENV"
+          {
+            echo 'EXPECTED_DEVICES<<EOF'
+            echo "$expected_devices"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
 
       - name: Clone LibWrt
         run: |
@@ -110,6 +118,9 @@ jobs:
 
           grep -Fqx 'CONFIG_TARGET_qualcommax=y' .config
           grep -Fqx "CONFIG_TARGET_qualcommax_${TARGET_SUBTARGET}=y" .config
+          while IFS= read -r device_config; do
+            grep -Fqx "$device_config" .config
+          done <<< "$EXPECTED_DEVICES"
 
       - name: Download source archives
         run: |

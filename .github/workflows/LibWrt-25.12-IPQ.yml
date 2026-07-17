@@ -22,15 +22,6 @@ on:
         required: true
         default: true
         type: boolean
-  push:
-    branches:
-      - codex/libwrt-25.12-minimal
-    paths:
-      - .github/workflows/LibWrt-25.12-IPQ.yml
-      - configs/libwrt-ipq60xx-wifi.config
-      - configs/libwrt-ipq60xx-nowifi.config
-      - configs/libwrt-ipq807x-wifi.config
-
 permissions:
   contents: write
 

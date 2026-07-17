@@ -145,7 +145,16 @@ jobs:
           tar -C "$OPENWRT_PATH/bin" -czf "$output_dir/Packages.tar.gz" packages
           rm -rf "$output_dir/packages"
 
-          find "$output_dir" -maxdepth 1 -type f -print -exec sha256sum {} \;
+          checksum_file="$RUNNER_TEMP/sha256sums"
+          (
+            cd "$output_dir"
+            find . -maxdepth 1 -type f ! -name sha256sums -print0 \
+              | sort -z \
+              | xargs -0 sha256sum
+          ) > "$checksum_file"
+          mv "$checksum_file" "$output_dir/sha256sums"
+          cat "$output_dir/sha256sums"
+
           echo "OUTPUT_DIR=$output_dir" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 

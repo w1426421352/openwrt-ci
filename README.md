@@ -29,8 +29,9 @@
 5. 编译成功后，从对应 GitHub Release 下载固件、`build.config`、
    `effective.config` 和 `Packages.tar.gz`。
 
-手动构建默认发布 Release。分支测试构建只保存 14 天的 Actions Artifact，避免把
-未经验证的测试固件发布为 Release。
+手动构建默认沿用原项目方式，覆盖更新对应的固定 Release：
+`IPQ60XX-6.12-WIFI`、`IPQ60XX-6.12-NOWIFI` 或 `IPQ807x-WIFI`。
+关闭发布选项时只保存 14 天的 Actions Artifact。
 
 ## 默认设置
 

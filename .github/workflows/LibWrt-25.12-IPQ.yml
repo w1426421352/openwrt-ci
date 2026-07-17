@@ -1,0 +1,174 @@
+name: LibWrt 25.12 IPQ
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile
+        required: true
+        default: ipq60xx-wifi
+        type: choice
+        options:
+          - ipq60xx-wifi
+          - ipq60xx-nowifi
+          - ipq807x-wifi
+      source_ref:
+        description: LibWrt branch or tag
+        required: true
+        default: 25.12-nss
+        type: string
+      publish_release:
+        description: Publish firmware to a GitHub Release
+        required: true
+        default: true
+        type: boolean
+  push:
+    branches:
+      - codex/libwrt-25.12-minimal
+    paths:
+      - .github/workflows/LibWrt-25.12-IPQ.yml
+      - configs/libwrt-ipq60xx-wifi.config
+      - configs/libwrt-ipq60xx-nowifi.config
+      - configs/libwrt-ipq807x-wifi.config
+
+permissions:
+  contents: write
+
+concurrency:
+  group: libwrt-${{ github.workflow }}-${{ github.ref }}-${{ inputs.profile || 'ipq60xx-wifi' }}
+  cancel-in-progress: false
+
+env:
+  REPO_URL: https://github.com/LiBwrt/LibWrt.git
+  SOURCE_REF: ${{ inputs.source_ref || '25.12-nss' }}
+  BUILD_PROFILE: ${{ inputs.profile || 'ipq60xx-wifi' }}
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: Build ${{ inputs.profile || 'ipq60xx-wifi' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout build configuration
+        uses: actions/checkout@v4
+
+      - name: Initialize build environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo bash -c 'bash <(curl -fsSL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          sudo timedatectl set-timezone "$TZ"
+          df -hT
+
+      - name: Select profile
+        run: |
+          case "$BUILD_PROFILE" in
+            ipq60xx-wifi)
+              config_file="configs/libwrt-ipq60xx-wifi.config"
+              target_subtarget="ipq60xx"
+              ;;
+            ipq60xx-nowifi)
+              config_file="configs/libwrt-ipq60xx-nowifi.config"
+              target_subtarget="ipq60xx"
+              ;;
+            ipq807x-wifi)
+              config_file="configs/libwrt-ipq807x-wifi.config"
+              target_subtarget="ipq807x"
+              ;;
+            *)
+              echo "Unsupported profile: $BUILD_PROFILE" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "CONFIG_FILE=$GITHUB_WORKSPACE/$config_file" >> "$GITHUB_ENV"
+          echo "TARGET_SUBTARGET=$target_subtarget" >> "$GITHUB_ENV"
+
+      - name: Clone LibWrt
+        run: |
+          git clone --depth 1 --single-branch --branch "$SOURCE_REF" "$REPO_URL" openwrt
+          cd openwrt
+          echo "OPENWRT_PATH=$PWD" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_ENV"
+          git show -s --date=iso-strict --format='Source: %H%nDate: %cd%nSubject: %s'
+
+      - name: Update feeds
+        run: |
+          cd "$OPENWRT_PATH"
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Generate configuration
+        run: |
+          cd "$OPENWRT_PATH"
+          cp "$CONFIG_FILE" .config
+          make defconfig
+          ./scripts/diffconfig.sh | tee "$RUNNER_TEMP/effective.config"
+
+          grep -Fqx 'CONFIG_TARGET_qualcommax=y' .config
+          grep -Fqx "CONFIG_TARGET_qualcommax_${TARGET_SUBTARGET}=y" .config
+
+      - name: Download source archives
+        run: |
+          cd "$OPENWRT_PATH"
+          make download -j"$(nproc)"
+          find dl -type f -size -1024c -print -delete
+
+      - name: Compile firmware
+        run: |
+          cd "$OPENWRT_PATH"
+          make -j"$(nproc)" || make -j1 V=s
+
+      - name: Collect firmware and packages
+        run: |
+          target_dir="$OPENWRT_PATH/bin/targets/qualcommax/$TARGET_SUBTARGET"
+          output_dir="$GITHUB_WORKSPACE/output/$BUILD_PROFILE"
+
+          test -d "$target_dir"
+          mkdir -p "$output_dir"
+          cp -a "$target_dir"/. "$output_dir"/
+          cp "$OPENWRT_PATH/.config" "$output_dir/build.config"
+          cp "$RUNNER_TEMP/effective.config" "$output_dir/effective.config"
+          tar -C "$OPENWRT_PATH/bin" -czf "$output_dir/Packages.tar.gz" packages
+
+          find "$output_dir" -maxdepth 1 -type f -print -exec sha256sum {} \;
+          echo "OUTPUT_DIR=$output_dir" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=libwrt-${BUILD_PROFILE}-${SOURCE_SHORT_SHA}" >> "$GITHUB_ENV"
+
+      - name: Upload workflow artifact
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_release }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: libwrt-${{ env.BUILD_PROFILE }}-${{ env.SOURCE_SHORT_SHA }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "LibWrt $BUILD_PROFILE ($SOURCE_SHORT_SHA)" \
+              --notes "LibWrt source: $REPO_URL@$SOURCE_SHA
+
+          Profile: $BUILD_PROFILE
+          Source ref: $SOURCE_REF
+          Default address: 192.168.1.1
+          Default password: none" \
+              --latest=false
+          fi
+
+          gh release upload "$RELEASE_TAG" "$OUTPUT_DIR"/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+      - name: Show disk usage
+        if: always()
+        run: df -hT

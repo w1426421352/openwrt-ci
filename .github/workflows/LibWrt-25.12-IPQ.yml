@@ -173,6 +173,7 @@ jobs:
         with:
           name: R${{ env.BUILD_DATE }} for ${{ env.RELEASE_TAG }}
           allowUpdates: true
+          removeArtifacts: true
           replacesArtifacts: true
           makeLatest: false
           tag: ${{ env.RELEASE_TAG }}

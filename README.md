@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | `ipq60xx-wifi` | Qihoo 360V6 | 上游 Wi-Fi + NSS | 上游默认 |
 | `ipq60xx-nowifi` | ZN-M2 | 关闭 Wi-Fi，保留有线 NSS | 上游默认 |
-| `ipq807x-wifi` | Redmi AX6、Xiaomi AX3600、Xiaomi AX9000 | 上游 Wi-Fi + NSS | 扩容/自定义 U-Boot 布局 |
+| `xiaomi-ax6-wifi` | 小米/红米 AX6（源码符号：`redmi_ax6`） | 上游 Wi-Fi + NSS | 扩容/自定义 U-Boot 布局 |
 
 > IPQ807x 配置不生成 stock-layout 机型。刷写前必须确认当前分区布局，不能把
 > stock 与扩容布局镜像混用，也不要强制跳过 sysupgrade 兼容性检查。
